@@ -1,0 +1,475 @@
+-- ================================================================= --
+--                             CONFIGURAÇÃO INICIAL                  --
+-- ================================================================= --
+
+-- Obter Serviços e Variáveis Globais (Roblox)
+local Players = game:GetService("Players")
+local VirtualUser = game:GetService("VirtualUser")
+local TeleportService = game:GetService("TeleportService")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+local StarterGui = game:GetService("StarterGui")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera -- Adicionado para a função Spectate
+
+-- Variáveis de estado globais
+local afkLoop         -- Referência para a thread Anti-AFK
+local toggleActive    = false -- Estado do Anti-AFK
+local TargetServerId  = ""    -- ID do servidor para Teleporte
+local NoClipActive    = false -- Estado do NoClip
+local ESPenabled      = false -- Estado do ESP
+local ESPHighlights   = {}    -- Tabela de Highlights para ESP
+local PlayerAddedConnection -- Conexão para PlayerAdded no ESP
+local flying          = false -- Estado do Voar
+local headSitEnabled  = false -- Estado do HeadSit
+local SelectedPlayer  = nil   -- Player alvo selecionado (para HeadSit/Spectate)
+local Spectating      = false -- Estado do Spectate
+
+-- Inicializar o Rayfield UI
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+local Window = Rayfield:CreateWindow({
+   Name = "Demon Hub",
+   Icon = 0,
+   LoadingTitle = "Carregando...",
+   LoadingSubtitle = "by demon",
+   ShowText = "Demon",
+   Theme = "demonred",
+   ToggleUIKeybind = "K",
+   DisableRayfieldPrompts = false,
+   DisableBuildWarnings = false,
+   ConfigurationSaving = {
+      Enabled = true,
+      FolderName = nil,
+      FileName = "DemonHub.txt"
+   },
+   Discord = {
+      Enabled = false,
+      Invite = "noinvitelink",
+      RememberJoins = true
+   },
+   KeySystem = false,
+   KeySettings = {
+      Title = "Untitled",
+      Subtitle = "Key System",
+      Note = "No method of obtaining the key is provided",
+      FileName = "Key",
+      SaveKey = true,
+      GrabKeyFromSite = false,
+      Key = {"666demon"}
+   }
+})
+
+
+-- ================================================================= --
+--                                ABA: NATIVOS                       --
+-- ================================================================= --
+
+local TabNativos = Window:CreateTab("Nativos", nil)
+local SectionModos = TabNativos:CreateSection("♦️ Modos")
+
+-- ⚙️ BOTÃO: Shift Lock (Script Externo)
+local ButtonShiftLock = TabNativos:CreateButton({
+   Name = "Shift Lock",
+   Callback = function()
+      Rayfield:Notify({
+         Title = "🌐 Executando...",
+         Content = "Tentando carregar o script Shift Lock...",
+         Duration = 3
+      })
+      loadstring(game:HttpGet("https://pastefy.app/xLUeuByu/raw",true))()
+   end,
+})
+
+-- 👻 NOCLIP ===========================
+local NoClipToggle = TabNativos:CreateToggle({
+    Name = "NoClip Total",
+    CurrentValue = false,
+    Flag = "NoClipTotalToggle",
+    Callback = function(isOn)
+        NoClipActive = isOn
+        -- A função é chamada abaixo para garantir colisão em todas as partes do corpo
+    end,
+})
+
+local function UpdateNoClip(char)
+    if not char then return end
+    for _, part in pairs(char:GetChildren()) do
+        if part:IsA("BasePart") then
+            -- Define CanCollide baseado no estado
+            part.CanCollide = not NoClipActive
+        end
+    end
+end
+
+-- Mantém todas as partes sem colisão enquanto ativo
+RunService.Stepped:Connect(function()
+    if NoClipActive then
+        UpdateNoClip(LocalPlayer.Character)
+    end
+end)
+
+-- Atualiza referências e reseta toggle ao respawnar
+LocalPlayer.CharacterAdded:Connect(function(char)
+    -- Ao respawnar, garante que o estado do NoClip volte ao normal
+    UpdateNoClip(char)
+    if NoClipToggle.CurrentValue then
+        NoClipToggle:Set(false)
+        NoClipActive = false
+    end
+end)
+
+-- 👟 WALKSPEED EM TEMPO REAL ========================
+local function GetHumanoid()
+    return LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+end
+local humanoid = GetHumanoid()
+
+local walkSpeed = humanoid and humanoid.WalkSpeed or 16 -- Valor inicial padrão
+
+local InputWalkSpeed = TabNativos:CreateInput({
+    Name = "Velocidade",
+    CurrentValue = tostring(walkSpeed),
+    PlaceholderText = "Digite a velocidade",
+    RemoveTextAfterFocusLost = false,
+    Flag = "WalkSpeedInput",
+    Callback = function(Text)
+        local num = tonumber(Text)
+        if num and num > 0 and num <= 500 then -- Adiciona um limite sensível
+            walkSpeed = num
+            local currentHumanoid = GetHumanoid()
+            if currentHumanoid then
+                currentHumanoid.WalkSpeed = walkSpeed
+            end
+        else
+             Rayfield:Notify({
+                Title = "⚠️ Valor Inválido",
+                Content = "Por favor, digite um número válido (>0 e <= 500).",
+                Duration = 3
+            })
+        end
+    end,
+})
+
+-- Atualiza humanoid caso o personagem regenere
+LocalPlayer.CharacterAdded:Connect(function(char)
+    local newHumanoid = char:WaitForChild("Humanoid")
+    newHumanoid.WalkSpeed = walkSpeed -- Aplica a última velocidade definida
+end)
+
+-- 🔄 BOTÃO: Regenerar Personagem
+local ButtonRegenerate = TabNativos:CreateButton({
+    Name = "Regenerar Personagem",
+    Callback = function()
+        local character = LocalPlayer.Character
+        if character then
+             Rayfield:Notify({
+                Title = "💀 Regenerando...",
+                Content = "Seu personagem está sendo forçado a regenerar.",
+                Duration = 2
+            })
+            character:BreakJoints() -- Força a regeneração
+        end
+    end
+})
+
+-- 🎨 TOGGLE: Shader Básica (Efeitos de Iluminação e Sky)
+local ToggleShader = TabNativos:CreateToggle({
+    Name = "Shader Básica",
+    CurrentValue = false,
+    Flag = "Shader",
+    Callback = function(Value)
+        local Lighting = game:GetService("Lighting")
+        local StarterGui = game:GetService("StarterGui")
+        
+        if Value then
+            -- Criação e configuração de efeitos... (o código original é complexo,
+            -- mantê-lo na íntegra para a funcionalidade completa)
+            
+            -- [Conteúdo original do ToggleShader: Criação dos Efeitos]
+            -- Evita criar múltiplos efeitos iguais
+            local Bloom = Lighting:FindFirstChild("CustomBloom") or Instance.new("BloomEffect", Lighting)
+            Bloom.Name = "CustomBloom"
+            Bloom.Intensity = 0.3
+            Bloom.Size = 10
+            Bloom.Threshold = 0.8
+
+            local Blur = Lighting:FindFirstChild("CustomBlur") or Instance.new("BlurEffect", Lighting)
+            Blur.Name = "CustomBlur"
+            Blur.Size = 5
+
+            local ColorCor = Lighting:FindFirstChild("CustomColorCorrection") or Instance.new("ColorCorrectionEffect", Lighting)
+            ColorCor.Name = "CustomColorCorrection"
+            ColorCor.Brightness = 0.1
+            ColorCor.Contrast = 0.5
+            ColorCor.Saturation = -0.3
+            ColorCor.TintColor = Color3.fromRGB(255, 235, 203)
+
+            local SunRays = Lighting:FindFirstChild("CustomSunRays") or Instance.new("SunRaysEffect", Lighting)
+            SunRays.Name = "CustomSunRays"
+            SunRays.Intensity = 0.075
+            SunRays.Spread = 0.727
+
+            local Sky = Lighting:FindFirstChild("CustomSky") or Instance.new("Sky", Lighting)
+            Sky.Name = "CustomSky"
+            Sky.SkyboxBk = "http://www.roblox.com/asset/?id=151165214"
+            Sky.SkyboxDn = "http://www.roblox.com/asset/?id=151165197"
+            Sky.SkyboxFt = "http://www.roblox.com/asset/?id=151165224"
+            Sky.SkyboxLf = "http://www.roblox.com/asset/?id=151165191"
+            Sky.SkyboxRt = "http://www.roblox.com/asset/?id=151165206"
+            Sky.SkyboxUp = "http://www.roblox.com/asset/?id=151165227"
+            Sky.SunAngularSize = 10
+
+            local Atm = Lighting:FindFirstChild("CustomAtmosphere") or Instance.new("Atmosphere", Lighting)
+            Atm.Name = "CustomAtmosphere"
+            Atm.Density = 0.364
+            Atm.Offset = 0.556
+            Atm.Color = Color3.fromRGB(199, 175, 166)
+            Atm.Decay = Color3.fromRGB(44, 39, 33)
+            Atm.Glare = 0.36
+            Atm.Haze = 1.72
+
+            -- Vignette
+            if not StarterGui:FindFirstChild("CustomVignetteGui") then
+                local Gui = Instance.new("ScreenGui")
+                Gui.Name = "CustomVignetteGui"
+                Gui.Parent = StarterGui
+                Gui.IgnoreGuiInset = true
+
+                local ShadowFrame = Instance.new("ImageLabel")
+                ShadowFrame.Parent = Gui
+                ShadowFrame.AnchorPoint = Vector2.new(0.5,1)
+                ShadowFrame.Position = UDim2.new(0.5,0,1,0)
+                ShadowFrame.Size = UDim2.new(1,0,1.05,0)
+                ShadowFrame.BackgroundTransparency = 1
+                ShadowFrame.Image = "rbxassetid://4576475446"
+                ShadowFrame.ImageTransparency = 0.3
+                ShadowFrame.ZIndex = 10
+            end
+
+            -- Lighting settings
+            Lighting.Ambient = Color3.fromRGB(2,2,2)
+            Lighting.Brightness = 2.25
+            Lighting.ColorShift_Bottom = Color3.fromRGB(0,0,0)
+            Lighting.ColorShift_Top = Color3.fromRGB(0,0,0)
+            Lighting.EnvironmentDiffuseScale = 0.2
+            Lighting.EnvironmentSpecularScale = 0.2
+            Lighting.GlobalShadows = true
+            Lighting.OutdoorAmbient = Color3.fromRGB(0,0,0)
+            Lighting.ShadowSoftness = 0.2
+            Lighting.ClockTime = 17
+            Lighting.GeographicLatitude = 45
+            Lighting.ExposureCompensation = 0.5
+
+            Rayfield:Notify({
+                Title = "✨ Shader Ativa",
+                Content = "Os efeitos visuais foram aplicados ao jogo.",
+                Duration = 4
+            })
+        else
+            -- Remove apenas os efeitos adicionados pelo toggle
+            for _, name in pairs({"CustomBloom","CustomBlur","CustomColorCorrection","CustomSunRays","CustomSky","CustomAtmosphere"}) do
+                local effect = Lighting:FindFirstChild(name)
+                if effect then effect:Destroy() end
+            end
+            local gui = StarterGui:FindFirstChild("CustomVignetteGui")
+            if gui then gui:Destroy() end
+
+            -- Restaura configurações padrão do Roblox
+            Lighting.Ambient = Color3.fromRGB(178,178,178)
+            Lighting.Brightness = 2
+            Lighting.ColorShift_Bottom = Color3.fromRGB(0,0,0)
+            Lighting.ColorShift_Top = Color3.fromRGB(0,0,0)
+            Lighting.EnvironmentDiffuseScale = 1
+            Lighting.EnvironmentSpecularScale = 1
+            Lighting.GlobalShadows = true
+            Lighting.OutdoorAmbient = Color3.fromRGB(128,128,128)
+            Lighting.ShadowSoftness = 0.5
+            Lighting.ClockTime = 12
+            Lighting.GeographicLatitude = 0
+            Lighting.ExposureCompensation = 0
+
+            Rayfield:Notify({
+                Title = "🎨 Shader Desativada",
+                Content = "Os efeitos visuais do jogo foram restaurados.",
+                Duration = 4
+            })
+        end
+    end,
+})
+
+-- 📜 BOTÃO: Infiniteyield Script (Script Externo)
+local ButtonInfiniteYield = TabNativos:CreateButton({
+   Name = "Infiniteyield Script",
+   Callback = function()
+      Rayfield:Notify({
+         Title = "🌐 Executando...",
+         Content = "Tentando carregar o InfiniteYield...",
+         Duration = 3
+      })
+      loadstring(game:HttpGet('https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source'))()
+   end,
+})
+
+-- ================================================================= --
+--                                ABA: USER (FUNÇÕES)                --
+-- ================================================================= --
+
+local TabUser = Window:CreateTab("User", nil)
+local SectionUserFuncoes = TabUser:CreateSection("♦️ Funções")
+
+-- ✈️ VOAR =============================
+local hrp, hum, char -- Variáveis para o personagem
+local flightforce = Instance.new("BodyVelocity")
+flightforce.MaxForce = Vector3.new(1, 1, 1) * 10^6
+flightforce.P = 10^6
+
+local flightGryo = Instance.new("BodyGyro")
+flightGryo.MaxTorque = Vector3.new(1, 1, 1) * 10^6
+flightGryo.P = 10^6
+
+local controlModule = nil -- Será carregado na primeira CharacterAdded
+
+local function GetCharacterParts()
+    char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    hum = char:WaitForChild("Humanoid")
+    hrp = char:WaitForChild("HumanoidRootPart")
+    if not controlModule then
+        -- Carrega o módulo de controle uma vez
+        controlModule = require(LocalPlayer:WaitForChild("PlayerScripts"):WaitForChild("PlayerModule"):WaitForChild("ControlModule"))
+    end
+end
+
+GetCharacterParts()
+
+local function StartFlying()
+    if flying then return end
+    flying = true
+    flightGryo.Parent = hrp
+    flightforce.Parent = hrp
+    
+    -- Desativa a animação padrão de caminhar/parar
+    local animateScript = char:FindFirstChild("Animate")
+    if animateScript then animateScript.Disabled = true end
+
+    task.spawn(function()
+        while flying and hrp and camera do
+            local movevector = controlModule:GetMoveVector()
+            -- Movimento baseado na câmera
+            local direction = camera.CFrame.RightVector * (movevector.X) + camera.CFrame.LookVector * (movevector.Z * -1)
+
+            if direction:Dot(direction) > 0 then
+                direction = direction.Unit
+            end
+
+            flightGryo.CFrame = camera.CFrame
+            flightforce.Velocity = direction * 100 -- Velocidade de voo
+
+            task.wait()
+        end
+    end)
+    Rayfield:Notify({Title = "✈️ Voar Ativo", Content = "Use as teclas de movimento para voar.", Duration = 3})
+end
+
+local function StopFlying()
+    if not flying then return end
+    flying = false
+    flightGryo.Parent = nil
+    flightforce.Parent = nil
+    local animateScript = char:FindFirstChild("Animate")
+    if animateScript then animateScript.Disabled = false end
+    Rayfield:Notify({Title = "🛬 Voar Desativado", Content = "Você voltou ao modo de movimento normal.", Duration = 3})
+end
+
+local ToggleFly = TabUser:CreateToggle({
+    Name = "Voar",
+    CurrentValue = false,
+    Flag = "FlyPlay",
+    Callback = function(Value)
+        if Value then
+            StartFlying()
+        else
+            StopFlying()
+        end
+    end,
+})
+
+-- Resetar Toggle e voo quando o personagem regenerar
+LocalPlayer.CharacterAdded:Connect(function(newChar)
+    GetCharacterParts() -- Atualiza as referências
+    if flying then -- Se estava voando, desativa e reseta o toggle
+        StopFlying()
+        if ToggleFly.CurrentValue then
+            ToggleFly:Set(false)
+        end
+    end
+end)
+
+-- 👁️ ESP SIMPLES =======================
+local function AddESP(player)
+    -- Cria ESP no character atual
+    local function CreateHighlight(char)
+        -- remove antigo se existir
+        if ESPHighlights[player] then
+            ESPHighlights[player]:Destroy()
+            ESPHighlights[player] = nil
+        end
+        
+        if not char then return end
+
+        local highlight = Instance.new("Highlight")
+        highlight.Name = "_ESP"
+        highlight.Adornee = char
+        highlight.FillColor = Color3.fromRGB(255, 0, 0)
+        highlight.FillTransparency = 0.5
+        highlight.OutlineColor = Color3.fromRGB(255, 0, 0)
+        highlight.Parent = game:GetService("CoreGui")
+        ESPHighlights[player] = highlight
+    end
+
+    -- Cria o highlight se o character já existir
+    if player.Character then
+        CreateHighlight(player.Character)
+    end
+    
+    -- Escuta o respawn
+    player.CharacterAdded:Connect(function(char)
+        if ESPenabled then
+            CreateHighlight(char)
+        end
+    end)
+end
+
+local function RemoveESP()
+    for _, highlight in pairs(ESPHighlights) do
+        if highlight then highlight:Destroy() end
+    end
+    ESPHighlights = {}
+end
+
+local ToggleESP = TabUser:CreateToggle({
+    Name = "ESP",
+    CurrentValue = false,
+    Flag = "ESP_Toggle",
+    Callback = function(Value)
+        ESPenabled = Value
+        if Value then
+            Rayfield:Notify({Title = "👁️ ESP Ativo", Content = "Visualizando outros jogadores.", Duration = 3})
+            
+            -- Adiciona ESP nos jogadores atuais
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p ~= LocalPlayer then AddESP(p) end
+            end
+            -- Conecta para futuros jogadores
+            PlayerAddedConnection = Players.PlayerAdded:Connect(function(p)
+                if p ~= LocalPlayer then AddESP(p) end
+            end)
+        else
+            RemoveESP()
+            if PlayerAddedConnection then
+                PlayerAddedConnection:Disconnect()
+                PlayerAddedConnection = nil
+            end
+            Rayfield:Notify({Title = "❌ ESP Desativado", Content = "Os efeitos de visualização foram removidos.", Duration = 3})
+        end
+    end
+})
