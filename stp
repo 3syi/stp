@@ -310,12 +310,6 @@ local ButtonInfiniteYield = TabNativos:CreateButton({
    end,
 })
 
--- ================================================================= --
---                                ABA: USER (FUNÇÕES)                --
--- ================================================================= --
-
-local TabUser = Window:CreateTab("User", nil)
-local SectionUserFuncoes = TabUser:CreateSection("♦️ Funções")
 
 -- ✈️ VOAR =============================
 local hrp, hum, char -- Variáveis para o personagem
@@ -380,7 +374,7 @@ local function StopFlying()
     Rayfield:Notify({Title = "🛬 Voar Desativado", Content = "Você voltou ao modo de movimento normal.", Duration = 3})
 end
 
-local ToggleFly = TabUser:CreateToggle({
+local ToggleFly = TabNativos:CreateToggle({
     Name = "Voar",
     CurrentValue = false,
     Flag = "FlyPlay",
@@ -446,7 +440,7 @@ local function RemoveESP()
     ESPHighlights = {}
 end
 
-local ToggleESP = TabUser:CreateToggle({
+local ToggleESP = TabNativos:CreateToggle({
     Name = "ESP",
     CurrentValue = false,
     Flag = "ESP_Toggle",
